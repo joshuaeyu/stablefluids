@@ -1,31 +1,20 @@
-/*
-  ======================================================================
-   demo.c --- protoype to show off the simple solver
-  ----------------------------------------------------------------------
-   Author : Jos Stam (jstam@aw.sgi.com)
-   Creation Date : Jan 9 2003
-
-   Description:
-
-	This code is a simple prototype that demonstrates how to use the
-	code provided in my GDC2003 paper entitles "Real-Time Fluid Dynamics
-	for Games". This code uses OpenGL and GLUT for graphics and interface
-
-  =======================================================================
-*/
-
 #include <stdlib.h>
 #include <stdio.h>
-#include <GL/glut.h>
+#include <fstream>
+#include <sstream>
+#include "vendor/glad/glad.h"
+#include "vendor/glfw/include/GLFW/glfw3.h"
 
 /* macros */
 
 #define IX(i,j) ((i)+(N+2)*(j))
+#define VIX(i,j) (IX(i,j)*5*2)
+#define DIX(i,j) (IX(i,j)*5*6)
 
 /* external definitions (from solver.c) */
 
-extern void dens_step ( int N, float * x, float * x0, float * u, float * v, float diff, float dt );
-extern void vel_step ( int N, float * u, float * v, float * u0, float * v0, float visc, float dt );
+extern "C" void dens_step ( int N, float * x, float * x0, float * u, float * v, float diff, float dt );
+extern "C" void vel_step ( int N, float * u, float * v, float * u0, float * v0, float visc, float dt );
 
 /* global variables */
 
@@ -36,11 +25,16 @@ static int dvel;
 
 static float * u, * v, * u_prev, * v_prev;
 static float * dens, * dens_prev;
+static float * vel_vtx_data, * dens_vtx_data;
 
-static int win_id;
+static GLFWwindow* window;
 static int win_x, win_y;
 static int mouse_down[3];
 static int omx, omy, mx, my;
+
+static GLuint program_id;
+static GLuint vel_vao, vel_vbo;
+static GLuint dens_vao, dens_vbo;
 
 
 /*
@@ -58,6 +52,9 @@ static void free_data ( void )
 	if ( v_prev ) free ( v_prev );
 	if ( dens ) free ( dens );
 	if ( dens_prev ) free ( dens_prev );
+
+	if ( vel_vtx_data ) free ( vel_vtx_data );
+	if ( dens_vtx_data ) free ( dens_vtx_data );
 }
 
 static void clear_data ( void )
@@ -80,7 +77,10 @@ static int allocate_data ( void )
 	dens		= (float *) malloc ( size*sizeof(float) );	
 	dens_prev	= (float *) malloc ( size*sizeof(float) );
 
-	if ( !u || !v || !u_prev || !v_prev || !dens || !dens_prev ) {
+    vel_vtx_data  = (float *) malloc ( 5*2*size*sizeof(float) );
+    dens_vtx_data = (float *) malloc ( 5*6*size*sizeof(float) );
+
+	if ( !u || !v || !u_prev || !v_prev || !dens || !dens_prev || !vel_vtx_data || !dens_vtx_data ) {
 		fprintf ( stderr, "cannot allocate data\n" );
 		return ( 0 );
 	}
@@ -95,19 +95,126 @@ static int allocate_data ( void )
   ----------------------------------------------------------------------
 */
 
+static void build_shaders  ( void )
+{
+    // ==== File to cstring ====
+    std::ifstream       vs_ifstream,        fs_ifstream;
+    std::stringstream   vs_stringstream,    fs_stringstream;
+    std::string         vs_string,          fs_string;
+    const GLchar        *vs_cstr,           *fs_cstr;
+    
+    vs_ifstream.open("shaders/vshader.vs");
+    fs_ifstream.open("shaders/fshader.fs");
+    vs_stringstream << vs_ifstream.rdbuf();
+    fs_stringstream << fs_ifstream.rdbuf();
+    vs_string = vs_stringstream.str();
+    fs_string = fs_stringstream.str();
+    vs_cstr = vs_string.c_str();
+    fs_cstr = fs_string.c_str();
+    
+    // ==== Compile shaders ====
+    GLuint  vshader,          fshader;
+    GLint   vshader_compiled, fshader_compiled;
+
+    vshader = glCreateShader(GL_VERTEX_SHADER);
+    fshader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(vshader, 1, &vs_cstr, NULL);
+    glShaderSource(fshader, 1, &fs_cstr, NULL);
+
+    glCreateShader(GL_VERTEX_SHADER);
+    glCreateShader(GL_FRAGMENT_SHADER);
+
+    glCompileShader(vshader);
+    glGetShaderiv(vshader, GL_COMPILE_STATUS, &vshader_compiled);
+    if (!vshader_compiled) {
+        GLint log_length;
+        glGetShaderiv(vshader, GL_INFO_LOG_LENGTH, &log_length);
+        char *log = new char[log_length];
+        glGetShaderInfoLog(vshader, log_length, &log_length, log);
+        printf("Vertex Shader compilation failed: %s\n", log);
+        delete[] log;
+    }
+
+    glCompileShader(fshader);
+    glGetShaderiv(fshader, GL_COMPILE_STATUS, &fshader_compiled);
+    if (!fshader_compiled) {
+        GLint log_length;
+        glGetShaderiv(fshader, GL_INFO_LOG_LENGTH, &log_length);
+        char *log = new char[log_length];
+        glGetShaderInfoLog(fshader, log_length, &log_length, log);
+        printf("Fragment Shader compilation failed: %s\n", log);
+        delete[] log;
+    }
+    
+    program_id = glCreateProgram();
+    glAttachShader(program_id, vshader);
+    glAttachShader(program_id, fshader);
+
+    glLinkProgram(program_id);
+    GLint program_linked;
+    glGetProgramiv(program_id, GL_LINK_STATUS, &program_linked);
+    if (program_linked != GL_TRUE)
+    {
+        GLsizei log_length = 0;
+        GLchar message[1024];
+        glGetProgramInfoLog(program_id, 1024, &log_length, message);
+    }
+
+    glDeleteShader(vshader);
+    glDeleteShader(fshader);
+
+    glUseProgram(program_id);
+}
+
+static void gen_vertex_arrays ( void )
+{
+    // Velocity
+    glGenVertexArrays(1, &vel_vao);
+    glGenBuffers(1, &vel_vbo);
+
+    glBindVertexArray(vel_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vel_vbo);
+
+    glBufferData(GL_ARRAY_BUFFER, 5*2*(N+2)*(N+2)*sizeof(float), NULL, GL_DYNAMIC_DRAW);    // Per simulation coordinate: 2 vertices, each with 5 floats of data
+    
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(2*sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+
+    // Density
+    glGenVertexArrays(1, &dens_vao);
+    glGenBuffers(1, &dens_vbo);
+
+    glBindVertexArray(dens_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, dens_vbo);
+
+    glBufferData(GL_ARRAY_BUFFER, 5*6*(N+2)*(N+2)*sizeof(float), NULL, GL_DYNAMIC_DRAW);   // Per simulation coordinate: 4 vertices, each with 5 floats of data
+    
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(2*sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    
+}
+
 static void pre_display ( void )
 {
 	glViewport ( 0, 0, win_x, win_y );
-	glMatrixMode ( GL_PROJECTION );
-	glLoadIdentity ();
-	gluOrtho2D ( 0.0, 1.0, 0.0, 1.0 );
 	glClearColor ( 0.0f, 0.0f, 0.0f, 1.0f );
 	glClear ( GL_COLOR_BUFFER_BIT );
 }
 
 static void post_display ( void )
 {
-	glutSwapBuffers ();
+	glfwSwapBuffers(window);
 }
 
 static void draw_velocity ( void )
@@ -117,22 +224,34 @@ static void draw_velocity ( void )
 
 	h = 1.0f/N;
 
-	glColor3f ( 1.0f, 1.0f, 1.0f );
 	glLineWidth ( 1.0f );
 
-	glBegin ( GL_LINES );
+    for ( i=1 ; i<=N ; i++ ) {
+        x = (i-0.5f)*h;
+        for ( j=1 ; j<=N ; j++ ) {
+            y = (j-0.5f)*h;
+            
+            int l = VIX(i,j);
+            vel_vtx_data[VIX(i,j)+0] = x;
+            vel_vtx_data[VIX(i,j)+1] = y;
+            vel_vtx_data[VIX(i,j)+2] = 1;
+            vel_vtx_data[VIX(i,j)+3] = 1;
+            vel_vtx_data[VIX(i,j)+4] = 1;
 
-		for ( i=1 ; i<=N ; i++ ) {
-			x = (i-0.5f)*h;
-			for ( j=1 ; j<=N ; j++ ) {
-				y = (j-0.5f)*h;
+            vel_vtx_data[VIX(i,j)+5+0] = x+u[IX(i,j)];
+            vel_vtx_data[VIX(i,j)+5+1] = y+v[IX(i,j)];
+            vel_vtx_data[VIX(i,j)+5+2] = 1;
+            vel_vtx_data[VIX(i,j)+5+3] = 1;
+            vel_vtx_data[VIX(i,j)+5+4] = 1;
+        }
+    }
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vel_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 5*2*(N+2)*(N+2)*sizeof(float), vel_vtx_data);
 
-				glVertex2f ( x, y );
-				glVertex2f ( x+u[IX(i,j)], y+v[IX(i,j)] );
-			}
-		}
+    glBindVertexArray(vel_vao);
+    glDrawArrays(GL_LINES, 0, 2*(N+2)*(N+2));
 
-	glEnd ();
 }
 
 static void draw_density ( void )
@@ -142,26 +261,61 @@ static void draw_density ( void )
 
 	h = 1.0f/N;
 
-	glBegin ( GL_QUADS );
+    for ( i=0 ; i<=N ; i++ ) {
+        x = (i-0.5f)*h;
+        for ( j=0 ; j<=N ; j++ ) {
+            y = (j-0.5f)*h;
 
-		for ( i=0 ; i<=N ; i++ ) {
-			x = (i-0.5f)*h;
-			for ( j=0 ; j<=N ; j++ ) {
-				y = (j-0.5f)*h;
+            d00 = dens[IX(i,j)];
+            d01 = dens[IX(i,j+1)];
+            d10 = dens[IX(i+1,j)];
+            d11 = dens[IX(i+1,j+1)];
 
-				d00 = dens[IX(i,j)];
-				d01 = dens[IX(i,j+1)];
-				d10 = dens[IX(i+1,j)];
-				d11 = dens[IX(i+1,j+1)];
+            // Triangle 1
+            dens_vtx_data[DIX(i,j)+0] = x;
+            dens_vtx_data[DIX(i,j)+1] = y;
+            dens_vtx_data[DIX(i,j)+2] = d00;
+            dens_vtx_data[DIX(i,j)+3] = d00;
+            dens_vtx_data[DIX(i,j)+4] = d00;
+            
+            dens_vtx_data[DIX(i,j)+5+0] = x+h;
+            dens_vtx_data[DIX(i,j)+5+1] = y;
+            dens_vtx_data[DIX(i,j)+5+2] = d10;
+            dens_vtx_data[DIX(i,j)+5+3] = d10;
+            dens_vtx_data[DIX(i,j)+5+4] = d10;
+            
+            dens_vtx_data[DIX(i,j)+10+0] = x+h;
+            dens_vtx_data[DIX(i,j)+10+1] = y+h;
+            dens_vtx_data[DIX(i,j)+10+2] = d11;
+            dens_vtx_data[DIX(i,j)+10+3] = d11;
+            dens_vtx_data[DIX(i,j)+10+4] = d11;
+            
+            // Triangle 2
+            dens_vtx_data[DIX(i,j)+15+0] = x;
+            dens_vtx_data[DIX(i,j)+15+1] = y;
+            dens_vtx_data[DIX(i,j)+15+2] = d00;
+            dens_vtx_data[DIX(i,j)+15+3] = d00;
+            dens_vtx_data[DIX(i,j)+15+4] = d00;
+            
+            dens_vtx_data[DIX(i,j)+20+0] = x+h;
+            dens_vtx_data[DIX(i,j)+20+1] = y+h;
+            dens_vtx_data[DIX(i,j)+20+2] = d11;
+            dens_vtx_data[DIX(i,j)+20+3] = d11;
+            dens_vtx_data[DIX(i,j)+20+4] = d11;
 
-				glColor3f ( d00, d00, d00 ); glVertex2f ( x, y );
-				glColor3f ( d10, d10, d10 ); glVertex2f ( x+h, y );
-				glColor3f ( d11, d11, d11 ); glVertex2f ( x+h, y+h );
-				glColor3f ( d01, d01, d01 ); glVertex2f ( x, y+h );
-			}
-		}
+            dens_vtx_data[DIX(i,j)+25+0] = x;
+            dens_vtx_data[DIX(i,j)+25+1] = y+h;
+            dens_vtx_data[DIX(i,j)+25+2] = d01;
+            dens_vtx_data[DIX(i,j)+25+3] = d01;
+            dens_vtx_data[DIX(i,j)+25+4] = d01;
+        }
+    }
 
-	glEnd ();
+    glBindBuffer(GL_ARRAY_BUFFER, dens_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 5*6*(N+2)*(N+2)*sizeof(float), dens_vtx_data);
+
+    glBindVertexArray(dens_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 6*(N+2)*(N+2));
 }
 
 /*
@@ -202,72 +356,90 @@ static void get_from_UI ( float * d, float * u, float * v )
 
 /*
   ----------------------------------------------------------------------
-   GLUT callback routines
+   GLFW callback routines
   ----------------------------------------------------------------------
 */
 
-static void key_func ( unsigned char key, int x, int y )
+static void key_func (GLFWwindow* WINDOW, int key, int scancode, int action, int mods)
 {
-	switch ( key )
+	if (action != GLFW_PRESS)
+        return;
+
+    switch ( key )
 	{
-		case 'c':
-		case 'C':
+		case GLFW_KEY_C:
 			clear_data ();
 			break;
 
-		case 'q':
-		case 'Q':
+		case GLFW_KEY_Q:
 			free_data ();
-			exit ( 0 );
+			glfwTerminate();
+            glDeleteBuffers(1, &vel_vbo);
+            glDeleteBuffers(1, &dens_vbo);
+            glDeleteVertexArrays(1, &vel_vao);
+            glDeleteVertexArrays(1, &dens_vao);
+            glDeleteProgram(program_id);
+            exit ( 0 );
 			break;
 
-		case 'v':
-		case 'V':
+		case GLFW_KEY_V:
 			dvel = !dvel;
 			break;
 	}
 }
 
-static void mouse_func ( int button, int state, int x, int y )
+static void motion_func (GLFWwindow* window, double xpos, double ypos)
 {
-	omx = mx = x;
-	omx = my = y;
-
-	mouse_down[button] = state == GLUT_DOWN;
+	mx = xpos;
+	my = ypos;
 }
 
-static void motion_func ( int x, int y )
+static void reshape_func (GLFWwindow* window, int width, int height)
 {
-	mx = x;
-	my = y;
-}
-
-static void reshape_func ( int width, int height )
-{
-	glutSetWindow ( win_id );
-	glutReshapeWindow ( width, height );
+	glfwSetWindowSize(window, width, height);
 
 	win_x = width;
 	win_y = height;
 }
 
-static void idle_func ( void )
-{
-	get_from_UI ( dens_prev, u_prev, v_prev );
-	vel_step ( N, u, v, u_prev, v_prev, visc, dt );
-	dens_step ( N, dens, dens_prev, u, v, diff, dt );
+/*
+  ----------------------------------------------------------------------
+   Render loop routines
+  ----------------------------------------------------------------------
+*/
 
-	glutSetWindow ( win_id );
-	glutPostRedisplay ();
+static void process_mouse ( void )
+{
+    double x, y;
+    glfwGetCursorPos(window, &x, &y);;
+    omx = mx = x;
+	omx = my = y;
+
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        mouse_down[0] = true;
+    else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+        mouse_down[2] = true;
+    else {
+        mouse_down[0] = false;
+        mouse_down[2] = false;
+    }
 }
 
-static void display_func ( void )
+static void compute( void )
+{
+	
+    get_from_UI ( dens_prev, u_prev, v_prev );
+	vel_step ( N, u, v, u_prev, v_prev, visc, dt );
+	dens_step ( N, dens, dens_prev, u, v, diff, dt );
+}
+
+static void display ( void )
 {
 	pre_display ();
 
 		if ( dvel ) draw_velocity ();
 		else		draw_density ();
-
+        
 	post_display ();
 }
 
@@ -278,28 +450,20 @@ static void display_func ( void )
   ----------------------------------------------------------------------
 */
 
-static void open_glut_window ( void )
+static void open_glfw_window ( void )
 {
-	glutInitDisplayMode ( GLUT_RGBA | GLUT_DOUBLE );
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_FALSE);
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+	window = glfwCreateWindow(win_x, win_y, "Stable Fluids", NULL, NULL);
+    glfwMakeContextCurrent(window);
 
-	glutInitWindowPosition ( 0, 0 );
-	glutInitWindowSize ( win_x, win_y );
-	win_id = glutCreateWindow ( "Alias | wavefront" );
-
-	glClearColor ( 0.0f, 0.0f, 0.0f, 1.0f );
-	glClear ( GL_COLOR_BUFFER_BIT );
-	glutSwapBuffers ();
-	glClear ( GL_COLOR_BUFFER_BIT );
-	glutSwapBuffers ();
-
-	pre_display ();
-
-	glutKeyboardFunc ( key_func );
-	glutMouseFunc ( mouse_func );
-	glutMotionFunc ( motion_func );
-	glutReshapeFunc ( reshape_func );
-	glutIdleFunc ( idle_func );
-	glutDisplayFunc ( display_func );
+    glfwSetKeyCallback(window, key_func);
+    glfwSetCursorPosCallback(window, motion_func);
+	glfwSetWindowSizeCallback(window, reshape_func);
 }
 
 
@@ -311,7 +475,7 @@ static void open_glut_window ( void )
 
 int main ( int argc, char ** argv )
 {
-	glutInit ( &argc, argv );
+	glfwInit();
 
 	if ( argc != 1 && argc != 6 ) {
 		fprintf ( stderr, "usage : %s N dt diff visc force source\n", argv[0] );
@@ -357,9 +521,18 @@ int main ( int argc, char ** argv )
 
 	win_x = 512;
 	win_y = 512;
-	open_glut_window ();
+	open_glfw_window ();
+    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
-	glutMainLoop ();
+    build_shaders();
+    gen_vertex_arrays();
+
+	while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        process_mouse();
+        compute();
+        display();
+    }
 
 	exit ( 0 );
 }
