@@ -4,11 +4,11 @@ Jos Stam's original demo was written in C using GLUT for early versions of OpenG
 
 ![Screenshot of stable fluids demo](images/image0.png "Screenshot of stable fluids demo")
 
-To run the demo, run `make` and execute `main`.
+To run the demo, run `make` and execute `demo`.
 
 ```
 make
-./main
+./demo
 ```
 
 ## Goals
