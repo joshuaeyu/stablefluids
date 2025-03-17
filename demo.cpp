@@ -31,6 +31,7 @@ static GLFWwindow* window;
 static int win_x, win_y;
 static int mouse_down[3];
 static int omx, omy, mx, my;
+static bool paused = false;
 
 static GLuint program_id;
 static GLuint vel_vao, vel_vbo;
@@ -233,18 +234,19 @@ static void draw_velocity ( void )
         for ( j=1 ; j<=N ; j++ ) {
             y = (j-0.5f)*h;
             
-            int l = VIX(i,j);
-            vel_vtx_data[VIX(i,j)+0] = x;
-            vel_vtx_data[VIX(i,j)+1] = y;
-            // vel_vtx_data[VIX(i,j)+2] = 1;
-            vel_vtx_data[VIX(i,j)+3] = u[IX(i,j)];
-            vel_vtx_data[VIX(i,j)+4] = v[IX(i,j)];
+            const int idx = VIX(i,j);
 
-            vel_vtx_data[VIX(i,j)+5+0] = x+u[IX(i,j)];
-            vel_vtx_data[VIX(i,j)+5+1] = y+v[IX(i,j)];
-            // vel_vtx_data[VIX(i,j)+5+2] = 1;
-            vel_vtx_data[VIX(i,j)+5+3] = u[IX(i,j)];
-            vel_vtx_data[VIX(i,j)+5+4] = v[IX(i,j)];
+            vel_vtx_data[idx + 0] = x;
+            vel_vtx_data[idx + 1] = y;
+            // vel_vtx_data[idx + 2] = 1;
+            vel_vtx_data[idx + 3] = u[IX(i,j)];
+            vel_vtx_data[idx + 4] = v[IX(i,j)];
+
+            vel_vtx_data[idx + 5+0] = x+u[IX(i,j)];
+            vel_vtx_data[idx + 5+1] = y+v[IX(i,j)];
+            // vel_vtx_data[idx + 5+2] = 1;
+            vel_vtx_data[idx + 5+3] = u[IX(i,j)];
+            vel_vtx_data[idx + 5+4] = v[IX(i,j)];
         }
     }
     
@@ -261,7 +263,8 @@ static void draw_velocity ( void )
 static void draw_density ( void )
 {
 	int i, j;
-	float x, y, h, d00, d01, d10, d11;
+	float x, y, h;
+    float d00, d01, d10, d11;
     float u00, u01, u10, u11;
     float v00, v01, v10, v11;
 
@@ -289,44 +292,45 @@ static void draw_density ( void )
             u11 =    u[IX(i+1,j+1)];
             v11 =    v[IX(i+1,j+1)];
 
+            const int idx = DIX(i,j);
 
             // Triangle 1
-            dens_vtx_data[DIX(i,j)+0] = x;
-            dens_vtx_data[DIX(i,j)+1] = y;
-            dens_vtx_data[DIX(i,j)+2] = d00;
-            dens_vtx_data[DIX(i,j)+3] = u00;
-            dens_vtx_data[DIX(i,j)+4] = v00;
+            dens_vtx_data[idx + 0] = x;
+            dens_vtx_data[idx + 1] = y;
+            dens_vtx_data[idx + 2] = d00;
+            dens_vtx_data[idx + 3] = u00;
+            dens_vtx_data[idx + 4] = v00;
             
-            dens_vtx_data[DIX(i,j)+5+0] = x+h;
-            dens_vtx_data[DIX(i,j)+5+1] = y;
-            dens_vtx_data[DIX(i,j)+5+2] = d10;
-            dens_vtx_data[DIX(i,j)+5+3] = u10;
-            dens_vtx_data[DIX(i,j)+5+4] = v10;
+            dens_vtx_data[idx + 5+0] = x+h;
+            dens_vtx_data[idx + 5+1] = y;
+            dens_vtx_data[idx + 5+2] = d10;
+            dens_vtx_data[idx + 5+3] = u10;
+            dens_vtx_data[idx + 5+4] = v10;
             
-            dens_vtx_data[DIX(i,j)+10+0] = x+h;
-            dens_vtx_data[DIX(i,j)+10+1] = y+h;
-            dens_vtx_data[DIX(i,j)+10+2] = d11;
-            dens_vtx_data[DIX(i,j)+10+3] = u11;
-            dens_vtx_data[DIX(i,j)+10+4] = v11;
+            dens_vtx_data[idx + 10+0] = x+h;
+            dens_vtx_data[idx + 10+1] = y+h;
+            dens_vtx_data[idx + 10+2] = d11;
+            dens_vtx_data[idx + 10+3] = u11;
+            dens_vtx_data[idx + 10+4] = v11;
             
             // Triangle 2
-            dens_vtx_data[DIX(i,j)+15+0] = x;
-            dens_vtx_data[DIX(i,j)+15+1] = y;
-            dens_vtx_data[DIX(i,j)+15+2] = d00;
-            dens_vtx_data[DIX(i,j)+15+3] = u00;
-            dens_vtx_data[DIX(i,j)+15+4] = v00;
+            dens_vtx_data[idx + 15+0] = x;
+            dens_vtx_data[idx + 15+1] = y;
+            dens_vtx_data[idx + 15+2] = d00;
+            dens_vtx_data[idx + 15+3] = u00;
+            dens_vtx_data[idx + 15+4] = v00;
             
-            dens_vtx_data[DIX(i,j)+20+0] = x+h;
-            dens_vtx_data[DIX(i,j)+20+1] = y+h;
-            dens_vtx_data[DIX(i,j)+20+2] = d11;
-            dens_vtx_data[DIX(i,j)+20+3] = u11;
-            dens_vtx_data[DIX(i,j)+20+4] = v11;
+            dens_vtx_data[idx + 20+0] = x+h;
+            dens_vtx_data[idx + 20+1] = y+h;
+            dens_vtx_data[idx + 20+2] = d11;
+            dens_vtx_data[idx + 20+3] = u11;
+            dens_vtx_data[idx + 20+4] = v11;
 
-            dens_vtx_data[DIX(i,j)+25+0] = x;
-            dens_vtx_data[DIX(i,j)+25+1] = y+h;
-            dens_vtx_data[DIX(i,j)+25+2] = d01;
-            dens_vtx_data[DIX(i,j)+25+3] = u01;
-            dens_vtx_data[DIX(i,j)+25+4] = v01;
+            dens_vtx_data[idx + 25+0] = x;
+            dens_vtx_data[idx + 25+1] = y+h;
+            dens_vtx_data[idx + 25+2] = d01;
+            dens_vtx_data[idx + 25+3] = u01;
+            dens_vtx_data[idx + 25+4] = v01;
         }
     }
 
@@ -361,8 +365,14 @@ static void get_from_UI ( float * d, float * u, float * v )
 	if ( i<1 || i>N || j<1 || j>N ) return;
 
 	if ( mouse_down[0] ) {
-		u[IX(i,j)] = force * (mx-omx);
-		v[IX(i,j)] = force * (omy-my);
+        if (mx == omx)
+            u[IX(i,j)] = force;
+        else
+		    u[IX(i,j)] = force * (mx-omx);
+        if (my == omy)
+            v[IX(i,j)] = force;
+        else
+		    v[IX(i,j)] = force * (omy-my);
 	}
 
 	if ( mouse_down[2] ) {
@@ -391,7 +401,6 @@ static void key_func (GLFWwindow* WINDOW, int key, int scancode, int action, int
 		case GLFW_KEY_C:
 			clear_data ();
 			break;
-
 		case GLFW_KEY_Q:
 			free_data ();
             glDeleteBuffers(1, &vel_vbo);
@@ -402,20 +411,22 @@ static void key_func (GLFWwindow* WINDOW, int key, int scancode, int action, int
 			glfwTerminate();
             exit ( 0 );
 			break;
-
 		case GLFW_KEY_V:
 			dvel = !dvel;
+			break;
+		case GLFW_KEY_P:
+			paused = !paused;
 			break;
 	}
 }
 
-static void motion_func (GLFWwindow* window, double xpos, double ypos)
+static void cursorpos_func (GLFWwindow* window, double xpos, double ypos)
 {
 	mx = xpos;
 	my = ypos;
 }
 
-static void reshape_func (GLFWwindow* window, int width, int height)
+static void windowsize_func (GLFWwindow* window, int width, int height)
 {
 	glfwSetWindowSize(window, width, height);
 
@@ -433,22 +444,15 @@ static void process_mouse ( void )
 {
     double x, y;
     glfwGetCursorPos(window, &x, &y);;
-    omx = mx = x;
-	omx = my = y;
+    mx = x;
+	my = y;
 
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-        mouse_down[0] = true;
-    else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
-        mouse_down[2] = true;
-    else {
-        mouse_down[0] = false;
-        mouse_down[2] = false;
-    }
+    mouse_down[0] = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    mouse_down[2] = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 }
 
 static void compute( void )
 {
-	
     get_from_UI ( dens_prev, u_prev, v_prev );
 	vel_step ( N, u, v, u_prev, v_prev, visc, dt );
 	dens_step ( N, dens, dens_prev, u, v, diff, dt );
@@ -483,8 +487,8 @@ static void open_glfw_window ( void )
     glfwMakeContextCurrent(window);
 
     glfwSetKeyCallback(window, key_func);
-    glfwSetCursorPosCallback(window, motion_func);
-	glfwSetWindowSizeCallback(window, reshape_func);
+    glfwSetCursorPosCallback(window, cursorpos_func);
+	glfwSetWindowSizeCallback(window, windowsize_func);
 }
 
 
@@ -514,8 +518,8 @@ int main ( int argc, char ** argv )
 		N = 128;
 		dt = 0.05f;
 		diff = 0.00005f;
-		visc = 0.002f;
-		force = 10.0f;
+		visc = 0.001f;
+		force = 20.0f;
 		source = 250.0f;
 		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n",
 			N, dt, diff, visc, force, source );
@@ -540,8 +544,8 @@ int main ( int argc, char ** argv )
 	if ( !allocate_data () ) exit ( 1 );
 	clear_data ();
 
-	win_x = 1024;
-	win_y = 512;
+	win_x = 1280;
+	win_y = 720;
 	open_glfw_window ();
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
@@ -551,8 +555,10 @@ int main ( int argc, char ** argv )
 	while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         process_mouse();
-        compute();
-        display();
+        if (!paused) {
+            compute();
+            display();
+        }
     }
 
 	exit ( 0 );
