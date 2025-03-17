@@ -11,6 +11,12 @@ make
 ./main
 ```
 
+## Goals
+ - Convert boundary conditions from fixed to periodic - ***Done!***
+ - Vary visuals based on density and/or velocity
+ - Expand simulation to three dimensions
+ - Render in three dimensions
+
 ## Reference
 
 Jos Stam. 1999. Stable fluids. In Proceedings of the 26th annual conference on Computer graphics and interactive techniques (SIGGRAPH '99). ACM Press/Addison-Wesley Publishing Co., USA, 121–128. https://doi.org/10.1145/311535.311548
