@@ -13,7 +13,7 @@ make
 
 ## Goals
  - Convert boundary conditions from fixed to periodic - ***Done!***
- - Vary visuals based on density and/or velocity
+ - Vary visuals based on density and/or velocity - ***Done!***
  - Expand simulation to three dimensions
  - Render in three dimensions
 

@@ -177,10 +177,10 @@ static void gen_vertex_arrays ( void )
 
     glBufferData(GL_ARRAY_BUFFER, 5*2*(N+2)*(N+2)*sizeof(float), NULL, GL_DYNAMIC_DRAW);    // Per simulation coordinate: 2 vertices, each with 5 floats of data
     
-    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(0);   // Coordinate
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(2*sizeof(float)));
+    glEnableVertexAttribArray(2);   // Velocity
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(3*sizeof(float)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -195,10 +195,12 @@ static void gen_vertex_arrays ( void )
 
     glBufferData(GL_ARRAY_BUFFER, 5*6*(N+2)*(N+2)*sizeof(float), NULL, GL_DYNAMIC_DRAW);   // Per simulation coordinate: 4 vertices, each with 5 floats of data
     
-    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(0);   // Coordinates
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(2*sizeof(float)));
+    glEnableVertexAttribArray(1);   // Density
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(2*sizeof(float)));
+    glEnableVertexAttribArray(2);   // Velocity
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 5*sizeof(float), (void *)(3*sizeof(float)));
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
@@ -234,20 +236,22 @@ static void draw_velocity ( void )
             int l = VIX(i,j);
             vel_vtx_data[VIX(i,j)+0] = x;
             vel_vtx_data[VIX(i,j)+1] = y;
-            vel_vtx_data[VIX(i,j)+2] = 1;
-            vel_vtx_data[VIX(i,j)+3] = 1;
-            vel_vtx_data[VIX(i,j)+4] = 1;
+            // vel_vtx_data[VIX(i,j)+2] = 1;
+            vel_vtx_data[VIX(i,j)+3] = u[IX(i,j)];
+            vel_vtx_data[VIX(i,j)+4] = v[IX(i,j)];
 
             vel_vtx_data[VIX(i,j)+5+0] = x+u[IX(i,j)];
             vel_vtx_data[VIX(i,j)+5+1] = y+v[IX(i,j)];
-            vel_vtx_data[VIX(i,j)+5+2] = 1;
-            vel_vtx_data[VIX(i,j)+5+3] = 1;
-            vel_vtx_data[VIX(i,j)+5+4] = 1;
+            // vel_vtx_data[VIX(i,j)+5+2] = 1;
+            vel_vtx_data[VIX(i,j)+5+3] = u[IX(i,j)];
+            vel_vtx_data[VIX(i,j)+5+4] = v[IX(i,j)];
         }
     }
     
     glBindBuffer(GL_ARRAY_BUFFER, vel_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, 5*2*(N+2)*(N+2)*sizeof(float), vel_vtx_data);
+
+    glUniform1i(glGetUniformLocation(program_id, "drawingDensity"), false);
 
     glBindVertexArray(vel_vao);
     glDrawArrays(GL_LINES, 0, 2*(N+2)*(N+2));
@@ -258,6 +262,8 @@ static void draw_density ( void )
 {
 	int i, j;
 	float x, y, h, d00, d01, d10, d11;
+    float u00, u01, u10, u11;
+    float v00, v01, v10, v11;
 
 	h = 1.0f/N;
 
@@ -266,53 +272,68 @@ static void draw_density ( void )
         for ( j=0 ; j<=N ; j++ ) {
             y = (j-0.5f)*h;
 
-            d00 = dens[IX(i,j)];
-            d01 = dens[IX(i,j+1)];
-            d10 = dens[IX(i+1,j)];
+            // Densities and velocities at the cell corners
+            d00 = dens[IX(i,  j  )];
+            u00 =    u[IX(i,  j  )];
+            v00 =    v[IX(i,  j  )];
+
+            d01 = dens[IX(i,  j+1)];
+            u01 =    u[IX(i,  j+1)];
+            v01 =    v[IX(i,  j+1)];
+            
+            d10 = dens[IX(i+1,  j)];
+            u10 =    u[IX(i+1,  j)];
+            v10 =    v[IX(i+1,  j)];
+
             d11 = dens[IX(i+1,j+1)];
+            u11 =    u[IX(i+1,j+1)];
+            v11 =    v[IX(i+1,j+1)];
+
 
             // Triangle 1
             dens_vtx_data[DIX(i,j)+0] = x;
             dens_vtx_data[DIX(i,j)+1] = y;
             dens_vtx_data[DIX(i,j)+2] = d00;
-            dens_vtx_data[DIX(i,j)+3] = d00;
-            dens_vtx_data[DIX(i,j)+4] = d00;
+            dens_vtx_data[DIX(i,j)+3] = u00;
+            dens_vtx_data[DIX(i,j)+4] = v00;
             
             dens_vtx_data[DIX(i,j)+5+0] = x+h;
             dens_vtx_data[DIX(i,j)+5+1] = y;
             dens_vtx_data[DIX(i,j)+5+2] = d10;
-            dens_vtx_data[DIX(i,j)+5+3] = d10;
-            dens_vtx_data[DIX(i,j)+5+4] = d10;
+            dens_vtx_data[DIX(i,j)+5+3] = u10;
+            dens_vtx_data[DIX(i,j)+5+4] = v10;
             
             dens_vtx_data[DIX(i,j)+10+0] = x+h;
             dens_vtx_data[DIX(i,j)+10+1] = y+h;
             dens_vtx_data[DIX(i,j)+10+2] = d11;
-            dens_vtx_data[DIX(i,j)+10+3] = d11;
-            dens_vtx_data[DIX(i,j)+10+4] = d11;
+            dens_vtx_data[DIX(i,j)+10+3] = u11;
+            dens_vtx_data[DIX(i,j)+10+4] = v11;
             
             // Triangle 2
             dens_vtx_data[DIX(i,j)+15+0] = x;
             dens_vtx_data[DIX(i,j)+15+1] = y;
             dens_vtx_data[DIX(i,j)+15+2] = d00;
-            dens_vtx_data[DIX(i,j)+15+3] = d00;
-            dens_vtx_data[DIX(i,j)+15+4] = d00;
+            dens_vtx_data[DIX(i,j)+15+3] = u00;
+            dens_vtx_data[DIX(i,j)+15+4] = v00;
             
             dens_vtx_data[DIX(i,j)+20+0] = x+h;
             dens_vtx_data[DIX(i,j)+20+1] = y+h;
             dens_vtx_data[DIX(i,j)+20+2] = d11;
-            dens_vtx_data[DIX(i,j)+20+3] = d11;
-            dens_vtx_data[DIX(i,j)+20+4] = d11;
+            dens_vtx_data[DIX(i,j)+20+3] = u11;
+            dens_vtx_data[DIX(i,j)+20+4] = v11;
 
             dens_vtx_data[DIX(i,j)+25+0] = x;
             dens_vtx_data[DIX(i,j)+25+1] = y+h;
             dens_vtx_data[DIX(i,j)+25+2] = d01;
-            dens_vtx_data[DIX(i,j)+25+3] = d01;
-            dens_vtx_data[DIX(i,j)+25+4] = d01;
+            dens_vtx_data[DIX(i,j)+25+3] = u01;
+            dens_vtx_data[DIX(i,j)+25+4] = v01;
         }
     }
 
     glBindBuffer(GL_ARRAY_BUFFER, dens_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, 5*6*(N+2)*(N+2)*sizeof(float), dens_vtx_data);
+
+    glUniform1i(glGetUniformLocation(program_id, "drawingDensity"), true);
 
     glBindVertexArray(dens_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6*(N+2)*(N+2));
