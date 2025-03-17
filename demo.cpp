@@ -2,8 +2,8 @@
 #include <stdio.h>
 #include <fstream>
 #include <sstream>
-#include "vendor/glad/glad.h"
-#include "vendor/glfw/include/GLFW/glfw3.h"
+#include <glad/glad.h>
+#include <glfw/include/GLFW/glfw3.h>
 
 /* macros */
 
@@ -46,15 +46,15 @@ static GLuint dens_vao, dens_vbo;
 
 static void free_data ( void )
 {
-	if ( u ) free ( u );
-	if ( v ) free ( v );
-	if ( u_prev ) free ( u_prev );
-	if ( v_prev ) free ( v_prev );
-	if ( dens ) free ( dens );
-	if ( dens_prev ) free ( dens_prev );
+	if ( u ) delete[] u;
+	if ( v ) delete[] v;
+	if ( u_prev ) delete[] u_prev;
+	if ( v_prev ) delete[] v_prev;
+	if ( dens ) delete[] dens;
+	if ( dens_prev ) delete[] dens_prev;
 
-	if ( vel_vtx_data ) free ( vel_vtx_data );
-	if ( dens_vtx_data ) free ( dens_vtx_data );
+	if ( vel_vtx_data ) delete[] vel_vtx_data;
+	if ( dens_vtx_data ) delete[] dens_vtx_data;
 }
 
 static void clear_data ( void )
@@ -70,15 +70,15 @@ static int allocate_data ( void )
 {
 	int size = (N+2)*(N+2);
 
-	u			= (float *) malloc ( size*sizeof(float) );
-	v			= (float *) malloc ( size*sizeof(float) );
-	u_prev		= (float *) malloc ( size*sizeof(float) );
-	v_prev		= (float *) malloc ( size*sizeof(float) );
-	dens		= (float *) malloc ( size*sizeof(float) );	
-	dens_prev	= (float *) malloc ( size*sizeof(float) );
+	u			= new float[size];
+	v			= new float[size];
+	u_prev		= new float[size];
+	v_prev		= new float[size];
+	dens		= new float[size];
+	dens_prev	= new float[size];
 
-    vel_vtx_data  = (float *) malloc ( 5*2*size*sizeof(float) );
-    dens_vtx_data = (float *) malloc ( 5*6*size*sizeof(float) );
+    vel_vtx_data  = new float[5*2*size];
+    dens_vtx_data = new float[5*6*size];
 
 	if ( !u || !v || !u_prev || !v_prev || !dens || !dens_prev || !vel_vtx_data || !dens_vtx_data ) {
 		fprintf ( stderr, "cannot allocate data\n" );
@@ -95,7 +95,7 @@ static int allocate_data ( void )
   ----------------------------------------------------------------------
 */
 
-static void build_shaders  ( void )
+static void build_shaders ( void )
 {
     // ==== File to cstring ====
     std::ifstream       vs_ifstream,        fs_ifstream;
@@ -153,7 +153,7 @@ static void build_shaders  ( void )
     glLinkProgram(program_id);
     GLint program_linked;
     glGetProgramiv(program_id, GL_LINK_STATUS, &program_linked);
-    if (program_linked != GL_TRUE)
+    if (!program_linked)
     {
         GLsizei log_length = 0;
         GLchar message[1024];
@@ -373,12 +373,12 @@ static void key_func (GLFWwindow* WINDOW, int key, int scancode, int action, int
 
 		case GLFW_KEY_Q:
 			free_data ();
-			glfwTerminate();
             glDeleteBuffers(1, &vel_vbo);
             glDeleteBuffers(1, &dens_vbo);
             glDeleteVertexArrays(1, &vel_vao);
             glDeleteVertexArrays(1, &dens_vao);
             glDeleteProgram(program_id);
+			glfwTerminate();
             exit ( 0 );
 			break;
 
@@ -490,12 +490,12 @@ int main ( int argc, char ** argv )
 	}
 
 	if ( argc == 1 ) {
-		N = 64;
-		dt = 0.1f;
-		diff = 0.0f;
-		visc = 0.0f;
-		force = 5.0f;
-		source = 100.0f;
+		N = 128;
+		dt = 0.05f;
+		diff = 0.00005f;
+		visc = 0.002f;
+		force = 10.0f;
+		source = 250.0f;
 		fprintf ( stderr, "Using defaults : N=%d dt=%g diff=%g visc=%g force = %g source=%g\n",
 			N, dt, diff, visc, force, source );
 	} else {
@@ -519,7 +519,7 @@ int main ( int argc, char ** argv )
 	if ( !allocate_data () ) exit ( 1 );
 	clear_data ();
 
-	win_x = 512;
+	win_x = 1024;
 	win_y = 512;
 	open_glfw_window ();
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);

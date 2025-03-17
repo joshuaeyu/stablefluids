@@ -1,4 +1,4 @@
-CXXFLAGS = -g -I./ -L./vendor/glfw/lib/ -lglfw3 -framework Cocoa -framework IOKit
+CXXFLAGS = -g -I./ -I./vendor/ -L./vendor/glfw/lib/ -lglfw3 -framework Cocoa -framework IOKit
 
 demo: solver.o glad.o
 
