@@ -1,4 +1,4 @@
-# OpenGL 3.3 Implementation of Jos Stam's Stable Fluids Demo
+# Real-Time Fluid Simulation following Jos Stam's *Stable Fluids*
 
 ![Screenshot of stable fluids demo](images/image0.png "Screenshot of stable fluids demo")
 Jos Stam's original demo was written in C using GLUT for early versions of OpenGL. To learn real-time fluid simulation techniques I've ported his demo to OpenGL 3.3 and introduced a few modifications, including:
@@ -20,8 +20,8 @@ make
 
 ## Libraries
 
- - [GLFW](https://www.glfw.org)
  - [GLAD](https://github.com/Dav1dde/glad)
+ - [GLFW](https://www.glfw.org)
 
 ## References
 
