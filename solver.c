@@ -16,18 +16,18 @@ void set_bnd ( int N, int b, float * x )
 	int i;
 
 	for ( i=1 ; i<=N ; i++ ) {
-		// Wrap x
+		// Torus
 		x[IX(0  ,i)] = x[IX(N,i)];	// left boundary
 		x[IX(N+1,i)] = x[IX(1,i)];	// right boundary
-		x[IX(i,0  )] = b==2 ? -x[IX(i,1)] : x[IX(i,1)]; // top boundary
-		x[IX(i,N+1)] = b==2 ? -x[IX(i,N)] : x[IX(i,N)]; // bottom boundary
+		x[IX(i,0  )] = x[IX(i,N)];  // top boundary
+		x[IX(i,N+1)] = x[IX(i,1)];  // bottom boundary
 		// // Solid walls
 		// // - For b = 1 and b = 2, which are only used by vel_step, ensures normal component of the velocity
 		// //   field is zero at the boundary since no matter should traverse walls
 		// x[IX(0  ,i)] = b==1 ? -x[IX(1,i)] : x[IX(1,i)];	// left boundary
 		// x[IX(N+1,i)] = b==1 ? -x[IX(N,i)] : x[IX(N,i)];	// right boundary
-		// x[IX(i,0  )] = b==2 ? -x[IX(i,1)] : x[IX(i,1)]; // top boundary
-		// x[IX(i,N+1)] = b==2 ? -x[IX(i,N)] : x[IX(i,N)]; // bottom boundary
+		// x[IX(i,0  )] = b==2 ? -x[IX(i,1)] : x[IX(i,1)];  // top boundary
+		// x[IX(i,N+1)] = b==2 ? -x[IX(i,N)] : x[IX(i,N)];  // bottom boundary
 	}
 	x[IX(0  ,0  )] = 0.5f*(x[IX(1,0  )]+x[IX(0  ,1)]);	// top-left corner
 	x[IX(0  ,N+1)] = 0.5f*(x[IX(1,N+1)]+x[IX(0  ,N)]);	// top-right corner
